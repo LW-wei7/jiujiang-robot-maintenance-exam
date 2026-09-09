@@ -1,0 +1,19 @@
+# Keep only the reviewed static app and its deployment configuration.
+/*
+!/.gitignore
+!/.nojekyll
+!/README.md
+!/index.html
+!/app.js
+!/enhancements.css
+!/questions.json
+!/explanations.json
+!/manifest.webmanifest
+!/sw.js
+!/icon-192.png
+!/icon-512.png
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/pages.yml

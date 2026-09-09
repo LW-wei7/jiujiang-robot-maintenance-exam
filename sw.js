@@ -1,9 +1,10 @@
 'use strict';
-const CACHE='jj-robot-v3-20260908-1';
+const CACHE='jj-robot-v4-20260909-1';
 const ASSETS=['./','./index.html','./app.js','./enhancements.css','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(url=>new Request(url,{cache:'reload'}))))));
+self.addEventListener('message',event=>{if(event.data?.type==='ACTIVATE_UPDATE')self.skipWaiting();});
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([
-  caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('jj-robot-v3-')&&k!==CACHE).map(k=>caches.delete(k)))),
+  caches.keys().then(keys=>Promise.all(keys.filter(k=>/^jj-robot-v[34]-/.test(k)&&k!==CACHE).map(k=>caches.delete(k)))),
   self.clients.claim()
 ])));
 self.addEventListener('fetch',event=>{

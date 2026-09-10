@@ -33,3 +33,11 @@ summary{cursor:pointer;min-height:44px;line-height:1.7;font-weight:700;padding:8
 .notice[hidden],button[hidden]{display:none}
 .title{font-size:20px}.small{font-size:13px}
 @media(max-width:440px){.header .title{font-size:18px}.card{padding:14px}.toolbar button{padding:10px 7px;font-size:14px}.app{padding-bottom:110px}}
+
+/* Original organizer figures, legible on phones and in both themes. */
+.option-content{display:block;min-width:0;flex:1;overflow-wrap:anywhere}
+.question-image{display:block;max-width:100%;height:auto;background:#fff;border-radius:8px;margin:10px 0;padding:6px}
+.option .question-image{width:320px;max-width:100%}
+.qtitle,.explanation{white-space:pre-wrap;overflow-wrap:anywhere}
+#sourceBox{overflow-wrap:anywhere}
+.option:disabled{opacity:1}

@@ -12,6 +12,14 @@
 !/sw.js
 !/icon-192.png
 !/icon-512.png
+!/assets/
+/assets/*
+!/assets/questions/
+/assets/questions/*
+!/assets/questions/*.png
+!/题库导入报告.md
+!/题源疑点清单.md
+!/验收结果.md
 !/.github/
 /.github/*
 !/.github/workflows/

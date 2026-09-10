@@ -28,6 +28,8 @@ jobs:
           mkdir -p _site
           cp index.html app.js enhancements.css questions.json explanations.json \
             manifest.webmanifest sw.js icon-192.png icon-512.png .nojekyll _site/
+          mkdir -p _site/assets
+          cp -R assets/questions _site/assets/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:

@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const wrongKey='jj_robot_official_202609_wrong', favKey='jj_robot_official_202609_fav';
-const historyKey='jj_robot_official_202609_history', statsKey='jj_robot_official_202609_stats';
+const wrongKey='jj_robot_zhenxing_20260920_wrong', favKey='jj_robot_zhenxing_20260920_fav';
+const historyKey='jj_robot_zhenxing_20260920_history', statsKey='jj_robot_zhenxing_20260920_stats';
 const memoryStore = new Map();
 let storageWarning=false;
 function read(key, fallback){
@@ -30,11 +30,11 @@ function uniqueQuestions(list){const seen=new Set();return list.filter(q=>{const
 const playable=BANK.filter(q=>!q.incomplete);
 function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 function pick(a,n){return shuffle(a).slice(0,n);}
-function typeName(t){return {single:'单选题',judge:'判断题'}[t];}
-function sourceLabel(q){return `${q.type==='single'?'选择':'判断'} ${q.source_no_label}`;}
-function answered(q){return !q.incomplete&&typeof answers[q.id]==='string'&&answers[q.id].length>0;}
+function typeName(t){return {single:'单选题',multi:'多选题',judge:'判断题'}[t];}
+function sourceLabel(q){return `${{single:'单选',multi:'多选',judge:'判断'}[q.type]} ${q.source_no_label}`;}
+function answered(q){const a=answers[q.id];return !q.incomplete&&(q.type==='multi'?Array.isArray(a)&&a.length>0:typeof a==='string'&&a.length>0);}
 function submitted(q){return answered(q)&&(examMode||!!checked[q.id]);}
-function isCorrect(q,a){return !q.incomplete&&a===q.source_answer;}
+function isCorrect(q,a){return !q.incomplete&&(q.type==='multi'?Array.isArray(a)&&[...new Set(a)].sort().join('')===q.source_answer.split('').sort().join(''):a===q.source_answer);}
 function showScreen(name){for(const s of ['home','quiz','result']) $(s).classList.toggle('hidden',s!==name);$('toolbar').classList.toggle('hidden',name!=='quiz');window.scrollTo(0,0);}
 function begin(list,name,seconds=0,issues=false){
   list=seconds?uniqueQuestions(list.filter(q=>!q.incomplete)):list;
@@ -45,9 +45,8 @@ function begin(list,name,seconds=0,issues=false){
   if(endAt)timerHandle=setInterval(tick,500);
 }
 function startExam(mode){
-  const total=mode==='standard'?90:30, all=uniqueQuestions(shuffle(playable));
-  const singleCount=Math.round(total*BANK.filter(q=>q.type==='single').length/BANK.length);
-  const counts={single:singleCount,judge:total-singleCount};
+  const all=uniqueQuestions(shuffle(playable));
+  const counts=mode==='standard'?{single:50,multi:10,judge:30}:{single:20,multi:3,judge:7};
   if(Object.entries(counts).some(([t,n])=>all.filter(q=>q.type===t).length<n))return alert('完整去重题量不足，暂不能生成该模拟卷。');
   begin(shuffle(Object.entries(counts).flatMap(([t,n])=>pick(all.filter(q=>q.type===t),n))),mode==='standard'?'90分钟模拟考试':'30题快速模拟',mode==='standard'?5400:1500);
 }
@@ -79,12 +78,12 @@ function render(){
   $('questionImages').replaceChildren();addImages($('questionImages'),q.images,`${sourceLabel(q)}：原稿机构图，含(a)～(d)标记`);
   const eligible=paper.filter(x=>!x.incomplete).length;
   $('prog').style.width=(eligible?100*paper.filter(submitted).length/eligible:0)+'%';
-  $('sourceBox').textContent=`来源：${q.source}｜原题 ${sourceLabel(q)}｜${q.incomplete?'原稿缺项，仅供浏览':q.explanation_status==='needs_review'?'解析有疑点，按题源答案判分':'学习解析已撰写'}${q.duplicate_source_ids.length?`｜原稿另有${q.duplicate_source_ids.length}条同题记录，随机同卷只抽一条`:''}`;
+  $('sourceBox').textContent=`来源：${q.source}｜PDF第${q.source_pages.join('、')}页（印刷页码${q.printed_pages.join('、')}）｜原题 ${sourceLabel(q)}｜${q.incomplete?'原稿有疑点，仅供浏览':q.explanation_status==='needs_review'?'解析待完善或需核对，按题源答案判分':'已有辅助学习解析'}${q.duplicate_source_ids.length?`｜原稿另有${q.duplicate_source_ids.length}条同题记录，随机同卷只抽一条`:''}`;
   $('options').replaceChildren();
   const current=answers[q.id],entries=q.type==='judge'?[['正确','正确'],['错误','错误']]:Object.entries(q.options);
   for(const [k,v] of entries){
     const b=document.createElement('button');b.className='option';b.type='button';
-    const selected=current===k,keyCorrect=q.source_answer===k;
+    const selected=q.type==='multi'?Array.isArray(current)&&current.includes(k):current===k,keyCorrect=q.type==='multi'?q.source_answer.includes(k):q.source_answer===k;
     b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));b.disabled=!!reveal;
     if(reveal&&!readonly){b.classList.toggle('correct',keyCorrect);b.classList.toggle('wrong',selected&&!keyCorrect);}
     const letter=document.createElement('span');letter.className='letter';letter.textContent=q.type==='judge'?'':k;
@@ -95,8 +94,8 @@ function render(){
   }
   const ex=$('explain');ex.replaceChildren();ex.className=readonly?'notice':reveal?(isCorrect(q,current)?'okbox':'badbox'):'hidden';
   if(reveal){
-    const title=document.createElement('b');title.textContent=readonly?'原稿缺项 · 仅供浏览，不计分':!submitted(q)?'未提交答案':isCorrect(q,current)?'回答正确（按题源）':'回答错误（按题源）';
-    const ans=document.createElement('p');ans.textContent='题源答案：'+q.source_answer+'（主办方提供）';
+    const title=document.createElement('b');title.textContent=readonly?'原稿疑点 · 仅供浏览，不计分':!submitted(q)?'未提交答案':isCorrect(q,current)?'回答正确（按题源）':'回答错误（按题源）';
+    const ans=document.createElement('p');ans.textContent='题源答案：'+q.source_answer+'（原PDF答案列）';
     const label=document.createElement('p');label.className='small';label.textContent='学习解析：备赛辅助生成，并非主办方官方解析'+(q.explanation_status==='needs_review'?' · 需核对':'');
     const desc=document.createElement('p');desc.className='explanation';desc.textContent=q.explanation;
     ex.append(title,ans,label,desc);
@@ -107,6 +106,10 @@ function render(){
     }
   }
   $('favBtn').textContent=ids(favKey).includes(q.id)?'已收藏':'收藏';
+  $('confirmAnswer').hidden=q.type!=='multi'||examMode||!!reveal;
+  $('confirmAnswer').disabled=!answered(q);
+  $('multiHint').hidden=q.type!=='multi';
+  $('multiHint').textContent=examMode?'多选题：可反复选择、取消；交卷时全选正确才得2分。':'多选题：选完后点击“确认答案”才提交。全选正确才得2分。';
   $('prevBtn').disabled=idx===0;
   $('nextBtn').textContent=idx===paper.length-1?(issueMode?'返回首页':reviewMode?'返回成绩':examMode?'交卷':'完成'):'下一题';
   $('finishBtn').textContent=issueMode?'返回首页':reviewMode?'返回成绩':examMode?'交卷':'结束练习';
@@ -114,10 +117,14 @@ function render(){
 }
 function selectAnswer(q,k){
   if(q.incomplete||issueMode||finished||reviewMode||(!examMode&&checked[q.id]))return;
-  answers[q.id]=k;
-  if(!examMode){checked[q.id]=true;record(q);}
+  if(q.type==='multi'){
+    const a=Array.isArray(answers[q.id])?answers[q.id]:[];
+    answers[q.id]=a.includes(k)?a.filter(x=>x!==k):[...a,k];
+  }else answers[q.id]=k;
+  if(!examMode&&q.type!=='multi'){checked[q.id]=true;record(q);}
   render();
 }
+function checkCurrent(){const q=paper[idx];if(!q||q.type!=='multi'||examMode||finished||reviewMode||q.incomplete||checked[q.id]||!answered(q))return;checked[q.id]=true;record(q);render();}
 function record(q){
   if(q.incomplete||issueMode||recorded[q.id]||!submitted(q))return;recorded[q.id]=true;
   let wrong=ids(wrongKey).filter(id=>id!==q.id);
@@ -134,7 +141,7 @@ function renderCard(){
   $('cardHint').textContent=`未提交 ${eligible.length-done} 题；原稿缺项 ${paper.length-eligible.length} 题仅浏览。点击题号跳转。`;
   $('cardGrid').replaceChildren();
   paper.forEach((q,i)=>{const b=document.createElement('button');b.type='button';b.textContent=i+1;b.className='card-number';
-    let status=issueMode||q.incomplete?'待核对':submitted(q)?'已答':'未答';
+    let status=issueMode||q.incomplete?'待核对':submitted(q)?'已答':answered(q)?'待确认':'未答';
     if(reviewMode&&submitted(q))status=isCorrect(q,answers[q.id])?'答对':'答错';
     b.dataset.state=status;b.setAttribute('aria-label',`第 ${i+1} 题，原题 ${sourceLabel(q)}，${status}`);b.title=`${sourceLabel(q)} · ${status}`;
     if(i===idx)b.setAttribute('aria-current','true');b.onclick=()=>jump(i);$('cardGrid').append(b);});
@@ -148,7 +155,7 @@ function finish(force=false){
   if(!force&&blank&&!confirm(`还有 ${blank} 题未提交。确定结束并计为未答吗？取消后可用答题卡继续作答。`))return;
   finished=true;clearInterval(timerHandle);
   let score=0,max=0,correct=0;
-  scored.forEach(q=>{const pts=1;max+=pts;if(submitted(q)&&isCorrect(q,answers[q.id])){score+=pts;correct++;}record(q);});
+  scored.forEach(q=>{const pts=q.type==='multi'?2:1;max+=pts;if(submitted(q)&&isCorrect(q,answers[q.id])){score+=pts;correct++;}record(q);});
   const item={time:Date.now(),mode:modeName,score,max,correct,total:scored.length,blank};
   write(historyKey,[item,...history()].slice(0,10));
   $('result').innerHTML=`<div class="card"><h2>${examMode?'考试':'练习'}结果${force?' · 时间到':''}</h2><div class="grid">
@@ -156,7 +163,7 @@ function finish(force=false){
     <div class="stat"><b>${(correct/scored.length*100).toFixed(1)}%</b><span>答题正确率（按题数）</span></div>
     <div class="stat"><b>${correct} / ${scored.length}</b><span>答对题数</span></div>
     <div class="stat"><b>${blank}</b><span>未提交题数</span></div></div>
-    <p class="small">单选 / 判断每题 1 分，均按主办方题源答案判分。原稿缺项题不计分；未答不计入高频错题。</p>
+    <p class="small">单选 / 判断每题1分，多选每题2分，按原PDF答案列判分。多选全对才得分（本网页判分设置）；疑点浏览题不计分，未提交不计入高频错题。</p>
     <div class="grid"><button onclick="reviewPaper()">查看本卷解析</button><button class="secondary" onclick="goHome()">返回首页</button></div></div>`;
   showScreen('result');renderHome();
 }
@@ -176,9 +183,9 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!finished
 window.addEventListener('beforeunload',e=>{if(paper.length&&!finished){e.preventDefault();e.returnValue='';}});
 function renderHome(){
   $('bankTotal').textContent=BANK.length;
-  for(const t of ['single','judge'])$('count-'+t).textContent=BANK.filter(q=>q.type===t).length;
+  for(const t of ['single','multi','judge'])$('count-'+t).textContent=BANK.filter(q=>q.type===t).length;
   $('count-incomplete').textContent=BANK.length-playable.length;
-  $('auditSummary').textContent=`原稿有${BANK.length}条，完整可答${playable.length}条，按题干去重后${uniqueQuestions(playable).length}条可组卷。选择188缺失，240之后又编号41；源编号均保留。${BANK.filter(q=>q.explanation_status==='needs_review').length}条解析有具体疑点，判分仍保留主办方答案。`;
+  $('auditSummary').textContent=`PDF原稿${BANK.length}条，${playable.length}条可答，去重后${uniqueQuestions(playable).length}组可组卷；另有${BANK.length-playable.length}条仅供浏览。全部原题号、页码和答案列均保留。${BANK.filter(q=>q.explanation_status==='needs_review').length}条解析待完善或需核对，答案转录核对不代表专业正确性认证。`;
   const current=$('catSel').value;
   $('catSel').replaceChildren(new Option('全部模块','all'));
   for(const category of [...new Set(BANK.map(q=>q.category))].sort())$('catSel').add(new Option(`${category}（${BANK.filter(q=>q.category===category).length}条）`,category));

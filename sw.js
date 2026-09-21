@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='robot-exam-zhenxing-20260920-v1';
+const CACHE='robot-exam-zhenxing-20260921-ui-v2';
 const ASSETS=['./','./index.html','./app.js','./enhancements.css','./questions.json','./explanations.json','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(url=>new Request(url,{cache:'reload'}))))));
 self.addEventListener('message',event=>{if(event.data?.type==='ACTIVATE_UPDATE')self.skipWaiting();});

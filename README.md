@@ -23,3 +23,10 @@ D:/python314/python.exe D:/Codx/zhenxing-bank-20260920/verify_zhenxing.py
 ```
 
 部署由main分支GitHub Actions发布到GitHub Pages。PDF原文件、浏览器学习记录、原始抽取材料和本地备份不在部署资源中。
+
+
+## 2026-09-21 刷题界面
+
+参考科目一刷题形式：简洁题面、圆形选项、答后解析、固定底栏、底部答题卡、左右滑动切题。设置中可选择深浅主题、字号及答对后自动下一题（默认关闭）。考试交卷前不显示正确答案。
+
+680条题库和解析JSON未改动；错题、收藏、成绩及统计沿用原存储，不丢失。新界面缓存为robot-exam-zhenxing-20260921-ui-v2。发布前49项检查通过，视觉核对见design-qa.md。可复用验证脚本位于本地D:/Codx/robot-exam-ui-20260921/verify_ui.py。

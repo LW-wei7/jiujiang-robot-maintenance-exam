@@ -26,6 +26,17 @@ function history(){const a=read(historyKey,[]);return Array.isArray(a)?a.filter(
 let paper=[],idx=0,answers={},checked={},recorded={},examMode=false,reviewMode=false;
 let modeName='',endAt=null,timerHandle=null,finished=false;
 let issueMode=false;
+let autoAdvanceTimer=null;
+const uiPrefs=read('jj_robot_drill_ui_v1',{});
+let autoNext=uiPrefs?.autoNext===true;
+let questionSize=['19','22','25'].includes(uiPrefs?.fontSize)?uiPrefs.fontSize:'19';
+function cancelAdvance(){clearTimeout(autoAdvanceTimer);autoAdvanceTimer=null;}
+function scheduleAdvance(q){
+  cancelAdvance();
+  if(!autoNext||examMode||reviewMode||finished||q.incomplete||!submitted(q)||!isCorrect(q,answers[q.id])||idx===paper.length-1)return;
+  const expected=idx;
+  autoAdvanceTimer=setTimeout(()=>{if(idx===expected&&paper[idx]?.id===q.id&&!finished&&!document.hidden&&!document.querySelector('dialog[open]'))jump(idx+1);},850);
+}
 function uniqueQuestions(list){const seen=new Set();return list.filter(q=>{const key=q.dedupeKey||q.question;if(seen.has(key))return false;seen.add(key);return true;});}
 const playable=BANK.filter(q=>!q.incomplete);
 function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -35,13 +46,14 @@ function sourceLabel(q){return `${{single:'单选',multi:'多选',judge:'判断'
 function answered(q){const a=answers[q.id];return !q.incomplete&&(q.type==='multi'?Array.isArray(a)&&a.length>0:typeof a==='string'&&a.length>0);}
 function submitted(q){return answered(q)&&(examMode||!!checked[q.id]);}
 function isCorrect(q,a){return !q.incomplete&&(q.type==='multi'?Array.isArray(a)&&[...new Set(a)].sort().join('')===q.source_answer.split('').sort().join(''):a===q.source_answer);}
-function showScreen(name){for(const s of ['home','quiz','result']) $(s).classList.toggle('hidden',s!==name);$('toolbar').classList.toggle('hidden',name!=='quiz');window.scrollTo(0,0);}
+function showScreen(name){cancelAdvance();for(const d of document.querySelectorAll('dialog[open]'))d.close();document.body.dataset.screen=name;for(const s of ['home','quiz','result']) $(s).classList.toggle('hidden',s!==name);$('toolbar').classList.toggle('hidden',name!=='quiz');window.scrollTo(0,0);}
 function begin(list,name,seconds=0,issues=false){
+  gesture=null;ignoreClickUntil=0;
   list=seconds?uniqueQuestions(list.filter(q=>!q.incomplete)):list;
   if(!list.length){alert('当前条件下没有题目。请调整筛选条件，或先完成答题、收藏。');return;}
   clearInterval(timerHandle);paper=[...list];modeName=name;examMode=seconds>0;reviewMode=false;issueMode=issues;finished=issues;
   idx=0;answers={};checked={};recorded={};endAt=seconds?Date.now()+seconds*1000:null;
-  $('answerCard').open=false;showScreen('quiz');render();tick();
+  showScreen('quiz');render();tick();
   if(endAt)timerHandle=setInterval(tick,500);
 }
 function startExam(mode){
@@ -74,6 +86,7 @@ function render(){
   const reveal=readonly||reviewMode||(!examMode&&checked[q.id]);
   $('qIndex').textContent=`${idx+1} / ${paper.length} · 原题 ${sourceLabel(q)}`;
   $('qType').textContent=typeName(q.type);$('qCat').textContent=q.category;
+  $('quizMode').textContent=reviewMode?'试卷回顾':modeName;
   $('qText').textContent=q.question;
   $('questionImages').replaceChildren();addImages($('questionImages'),q.images,`${sourceLabel(q)}：原稿机构图，含(a)～(d)标记`);
   const eligible=paper.filter(x=>!x.incomplete).length;
@@ -86,26 +99,35 @@ function render(){
     const selected=q.type==='multi'?Array.isArray(current)&&current.includes(k):current===k,keyCorrect=q.type==='multi'?q.source_answer.includes(k):q.source_answer===k;
     b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));b.disabled=!!reveal;
     if(reveal&&!readonly){b.classList.toggle('correct',keyCorrect);b.classList.toggle('wrong',selected&&!keyCorrect);}
-    const letter=document.createElement('span');letter.className='letter';letter.textContent=q.type==='judge'?'':k;
+    const letter=document.createElement('span');letter.className='letter';letter.setAttribute('aria-hidden','true');letter.textContent=q.type==='judge'?(k==='正确'?'A':'B'):k;
+    if(reveal&&!readonly&&(keyCorrect||selected)){
+      letter.replaceChildren();const icon=document.createElement('i');icon.className='icon '+(keyCorrect?'icon-check-lg':'icon-x-lg');letter.append(icon);
+    }
     const content=document.createElement('span');content.className='option-content';
-    const text=document.createElement('span');text.textContent=(v||((q.option_images[k]||[]).length?'':'【原稿缺少此选项】'))+(reveal&&!readonly?(keyCorrect?'（题源正确项）':selected?'（误选）':''):'');
+    const text=document.createElement('span');text.textContent=(v||((q.option_images[k]||[]).length?'':'【原稿缺少此选项】'));
+    b.setAttribute('aria-label',`${q.type==='judge'?(k==='正确'?'A':'B'):k} ${v}${reveal&&!readonly?(keyCorrect?'，题源正确项':selected?'，误选':''):''}`);
     content.append(text);addImages(content,q.option_images[k],`${sourceLabel(q)}：原稿${k}项公式`);
     b.append(letter,content);b.onclick=()=>selectAnswer(q,k);$('options').append(b);
   }
-  const ex=$('explain');ex.replaceChildren();ex.className=readonly?'notice':reveal?(isCorrect(q,current)?'okbox':'badbox'):'hidden';
+  const ex=$('explain');ex.replaceChildren();ex.className=reveal?'feedback '+(readonly||!submitted(q)?'feedback-neutral':isCorrect(q,current)?'feedback-correct':'feedback-wrong'):'hidden';
   if(reveal){
     const title=document.createElement('b');title.textContent=readonly?'原稿疑点 · 仅供浏览，不计分':!submitted(q)?'未提交答案':isCorrect(q,current)?'回答正确（按题源）':'回答错误（按题源）';
-    const ans=document.createElement('p');ans.textContent='题源答案：'+q.source_answer+'（原PDF答案列）';
-    const label=document.createElement('p');label.className='small';label.textContent='学习解析：备赛辅助生成，并非主办方官方解析'+(q.explanation_status==='needs_review'?' · 需核对':'');
+    const verdict=document.createElement('div');verdict.className='answer-verdict';
+    const ans=document.createElement('p');ans.className='answer-line';ans.append('答案 ');
+    const key=document.createElement('strong');key.textContent=q.type==='judge'?(q.source_answer==='正确'?'A':'B'):q.source_answer;ans.append(key,'　您选 ');
+    const mine=document.createElement('span');mine.className='my-answer'+(submitted(q)&&!isCorrect(q,current)?' wrong':'');mine.textContent=!submitted(q)?'未提交':q.type==='multi'?[...current].sort().join(''):q.type==='judge'?(current==='正确'?'A':'B'):current;ans.append(mine);
+    verdict.append(ans,title);
+    const heading=document.createElement('h2');heading.className='analysis-title';heading.textContent='本题解析';
+    const label=document.createElement('p');label.className='analysis-disclaimer';label.textContent='按原PDF答案列判分 · 辅助解析非官方解析'+(q.explanation_status==='needs_review'?' · 需核对':'');
     const desc=document.createElement('p');desc.className='explanation';desc.textContent=q.explanation;
-    ex.append(title,ans,label,desc);
+    ex.append(verdict,heading,label,desc);
     if(readonly){const note=document.createElement('p');note.textContent=q.incomplete_reason;ex.append(note);}
     for(const source of q.references||[]){
       if(!/^https:\/\//.test(source.url))continue;
       const a=document.createElement('a');a.href=source.url;a.textContent=source.title;a.target='_blank';a.rel='noopener noreferrer';ex.append(a,document.createElement('br'));
     }
   }
-  $('favBtn').textContent=ids(favKey).includes(q.id)?'已收藏':'收藏';
+  const favorite=ids(favKey).includes(q.id);$('favLabel').textContent=favorite?'已收藏':'收藏';$('favIcon').className='icon '+(favorite?'icon-star-fill':'icon-star');$('favBtn').setAttribute('aria-pressed',String(favorite));
   $('confirmAnswer').hidden=q.type!=='multi'||examMode||!!reveal;
   $('confirmAnswer').disabled=!answered(q);
   $('multiHint').hidden=q.type!=='multi';
@@ -123,8 +145,9 @@ function selectAnswer(q,k){
   }else answers[q.id]=k;
   if(!examMode&&q.type!=='multi'){checked[q.id]=true;record(q);}
   render();
+  scheduleAdvance(q);
 }
-function checkCurrent(){const q=paper[idx];if(!q||q.type!=='multi'||examMode||finished||reviewMode||q.incomplete||checked[q.id]||!answered(q))return;checked[q.id]=true;record(q);render();}
+function checkCurrent(){const q=paper[idx];if(!q||q.type!=='multi'||examMode||finished||reviewMode||q.incomplete||checked[q.id]||!answered(q))return;checked[q.id]=true;record(q);render();scheduleAdvance(q);}
 function record(q){
   if(q.incomplete||issueMode||recorded[q.id]||!submitted(q))return;recorded[q.id]=true;
   let wrong=ids(wrongKey).filter(id=>id!==q.id);
@@ -132,22 +155,28 @@ function record(q){
   write(wrongKey,wrong);
 }
 function toggleFav(){const q=paper[idx],a=ids(favKey);write(favKey,a.includes(q.id)?a.filter(id=>id!==q.id):[...a,q.id]);render();}
-function jump(i){idx=i;render();$('qText').scrollIntoView({block:'center'});}
+function jump(i){if(!Number.isInteger(i)||i<0||i>=paper.length)return;cancelAdvance();closeSheet('answerCard');idx=i;render();window.scrollTo(0,0);}
 function prevQ(){if(idx>0)jump(idx-1);}
 function nextQ(){if(idx<paper.length-1)jump(idx+1);else finish();}
 function renderCard(){
   const eligible=paper.filter(q=>!q.incomplete),done=eligible.filter(submitted).length;
+  const hideResults=examMode&&!finished;
+  $('rightCount').textContent=hideResults?done:eligible.filter(q=>submitted(q)&&isCorrect(q,answers[q.id])).length;
+  $('wrongCount').textContent=hideResults?eligible.length-done:eligible.filter(q=>submitted(q)&&!isCorrect(q,answers[q.id])).length;
+  $('rightLabel').textContent=hideResults?'已答':'答对';$('wrongLabel').textContent=hideResults?'未答':'答错';
+  $('paperPosition').textContent=`${idx+1}/${paper.length}`;
   $('cardSummary').textContent=`答题卡 · 已提交 ${done} / ${eligible.length}`;
   $('cardHint').textContent=`未提交 ${eligible.length-done} 题；原稿缺项 ${paper.length-eligible.length} 题仅浏览。点击题号跳转。`;
   $('cardGrid').replaceChildren();
   paper.forEach((q,i)=>{const b=document.createElement('button');b.type='button';b.textContent=i+1;b.className='card-number';
     let status=issueMode||q.incomplete?'待核对':submitted(q)?'已答':answered(q)?'待确认':'未答';
-    if(reviewMode&&submitted(q))status=isCorrect(q,answers[q.id])?'答对':'答错';
+    if((!examMode||reviewMode)&&submitted(q))status=isCorrect(q,answers[q.id])?'答对':'答错';
     b.dataset.state=status;b.setAttribute('aria-label',`第 ${i+1} 题，原题 ${sourceLabel(q)}，${status}`);b.title=`${sourceLabel(q)} · ${status}`;
     if(i===idx)b.setAttribute('aria-current','true');b.onclick=()=>jump(i);$('cardGrid').append(b);});
 }
 function firstBlank(){const i=paper.findIndex(q=>!q.incomplete&&!submitted(q));if(i<0)alert('可答题目均已提交');else jump(i);}
 function finish(force=false){
+  cancelAdvance();
   if(issueMode||paper.every(q=>q.incomplete)){goHome();return;}
   if(reviewMode){reviewMode=false;showScreen('result');return;}
   if(finished||!paper.length)return;
@@ -197,9 +226,31 @@ function renderHome(){
   if(!list.length)$('frequentList').textContent='暂无统计。每轮提交答错计1次；答对移出错题本，累计次数保留。';
   for(const q of list.slice(0,10)){const b=document.createElement('button');b.className='ghost frequent-row';b.textContent=`错 ${s[q.id].wrong} 次 · ${sourceLabel(q)} ${q.question}`;b.onclick=()=>begin([q],'高频错题');$('frequentList').append(b);}
 }
-function applyTheme(theme){document.documentElement.dataset.theme=theme; $('themeBtn').textContent=theme==='dark'?'切换浅色':'切换深色';$('themeBtn').setAttribute('aria-pressed',String(theme==='dark'));document.querySelector('meta[name="theme-color"]').content=theme==='dark'?'#111827':'#f5f7fb';}
-const preferred=read('jj_robot_theme_v3',null);applyTheme(['dark','light'].includes(preferred)?preferred:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+function applyTheme(theme){document.documentElement.dataset.theme=theme; $('themeBtn').textContent=theme==='dark'?'切换浅色':'切换深色';$('themeBtn').setAttribute('aria-pressed',String(theme==='dark'));$('darkSetting').checked=theme==='dark';document.querySelector('meta[name="theme-color"]').content=theme==='dark'?'#1b242d':'#f6f8fa';}
+const preferred=read('jj_robot_theme_v3',null);applyTheme(['dark','light'].includes(preferred)?preferred:'dark');
 $('themeBtn').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';write('jj_robot_theme_v3',t);applyTheme(t);};
+function closeSheet(id){const d=$(id);if(d?.open)d.close();}
+function openAnswerCard(){cancelAdvance();renderCard();if(!$('answerCard').open)$('answerCard').showModal();}
+function openSettings(){cancelAdvance();$('autoNextSetting').checked=autoNext;$('fontSetting').value=questionSize;if(!$('settingsSheet').open)$('settingsSheet').showModal();}
+function setQuizTheme(dark){const theme=dark?'dark':'light';write('jj_robot_theme_v3',theme);applyTheme(theme);}
+function saveUiPrefs(){write('jj_robot_drill_ui_v1',{autoNext,fontSize:questionSize});}
+function setAutoNext(value){cancelAdvance();autoNext=!!value;saveUiPrefs();}
+function setQuestionSize(value){if(!['19','22','25'].includes(value))return;questionSize=value;document.documentElement.style.setProperty('--qsize',value+'px');saveUiPrefs();}
+document.documentElement.style.setProperty('--qsize',questionSize+'px');
+for(const d of document.querySelectorAll('dialog'))d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();});
+let gesture=null,ignoreClickUntil=0;
+const surface=$('questionSurface');
+surface.addEventListener('touchstart',e=>{ignoreClickUntil=0;gesture=e.touches.length===1?{x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}:null;},{passive:true});
+surface.addEventListener('touchcancel',()=>{gesture=null;},{passive:true});
+surface.addEventListener('touchend',e=>{
+  if(!gesture||!e.changedTouches.length)return;const start=gesture;gesture=null;
+  const dx=e.changedTouches[0].clientX-start.x,dy=e.changedTouches[0].clientY-start.y;
+  if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.6&&Date.now()-start.t<1000&&!document.querySelector('dialog[open]')){
+    e.preventDefault();ignoreClickUntil=Date.now()+450;if(dx<0&&idx<paper.length-1)jump(idx+1);else if(dx>0&&idx>0)jump(idx-1);
+  }
+},{passive:false});
+surface.addEventListener('click',e=>{if(Date.now()<ignoreClickUntil){e.preventDefault();e.stopImmediatePropagation();}},true);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAdvance();});
 let installPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('installBtn').hidden=false;});
 $('installBtn').onclick=async()=>{if(installPrompt){await installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('installBtn').hidden=true;}};

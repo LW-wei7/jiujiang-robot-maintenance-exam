@@ -25,3 +25,5 @@
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/pages.yml
+
+!/design-qa.md
